@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,6 +12,22 @@
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
 >
+
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* =========================================================
+   SUPABASE CONNECTION
+   Replace BOTH values with your Supabase project values.
+   Use the publishable/anon key only. NEVER put the service_role key here.
+========================================================= */
+const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
+const SUPABASE_PUBLISHABLE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+let currentUser = null;
+let currentProfile = null;
+let currentSettings = null;
+</script>
 
 <style>
 
@@ -1513,7 +1530,7 @@ body.member-mode .profile-shell {
 </div>
 <form id="loginForm">
 <div id="loginStep" class="auth-step active">
-<div class="input-group"><label for="username">Username or email</label><div class="input-wrapper"><i class="fa-solid fa-user"></i><input id="username" type="text" placeholder="you@example.com or username" autocomplete="username" required></div></div>
+<div class="input-group"><label for="username">Email</label><div class="input-wrapper"><i class="fa-solid fa-user"></i><input id="username" type="text" placeholder="you@example.com" autocomplete="username" required></div></div>
 <div class="input-group"><label for="password">Password</label><div class="input-wrapper"><i class="fa-solid fa-lock"></i><input id="password" type="password" placeholder="Your password" autocomplete="current-password" required></div></div>
 <button class="primary-btn login-btn" type="submit"><i class="fa-solid fa-right-to-bracket"></i> Sign In</button>
 <button class="auth-link" type="button" onclick="showGuestMode()"><i class="fa-solid fa-eye"></i> Continue as guest</button>
@@ -2368,7 +2385,7 @@ function renderArtists(){const grid=document.getElementById("artistGrid");if(!gr
 function openArtist(name){const a=artistCatalog.find(x=>x.name===name);if(!a)return;document.getElementById("musicSearch").value=name;document.getElementById("genreFilter").value="all";navTo("music");renderMusic();showToast(name+" • "+a.genre);}
 function renderShorts(){const feed=document.getElementById("shortsFeed");if(!feed)return;feed.innerHTML=shortData.map((s,i)=>`<article class="tiktok-short" data-short="${i}"><div class="short-bg"></div><div class="short-noise"></div><div class="short-progress"><i></i></div><div class="short-content"><div class="short-creator"><span class="short-mini-avatar">${escapeHTML(s[1][0])}</span>@${escapeHTML(s[1])} <span class="artist-verified"><i class="fa-solid fa-circle-check"></i></span></div><h3>${escapeHTML(s[0])}</h3><p>${escapeHTML(s[2])} • #VybezApp #Shorts</p></div><div class="short-actions"><button class="short-action" onclick="shortAction(this,'like')"><i class="fa-solid fa-heart"></i><span>Like</span></button><button class="short-action" onclick="shortAction(this,'comment')"><i class="fa-solid fa-comment"></i><span>Comment</span></button><button class="short-action" onclick="shortAction(this,'share')"><i class="fa-solid fa-share"></i><span>Share</span></button><button class="short-action" onclick="shortAction(this,'save')"><i class="fa-solid fa-bookmark"></i><span>Save</span></button><button class="short-action" onclick="openVideo('${s[3]}','${escapeHTML(s[0])}')"><i class="fa-solid fa-play"></i><span>Watch</span></button></div><div class="comment-panel"><h4>Comments</h4><div class="comment-list"><div>Be the first to comment.</div></div><input placeholder="Add a comment..." onkeydown="if(event.key==='Enter')addComment(this)"></div></article>`).join("");}
 function shortAction(btn,type){if(type==="like"||type==="save"){btn.classList.toggle("active");showToast(btn.classList.contains("active")?(type==="like"?"Liked":"Saved"):(type==="like"?"Like removed":"Removed from saved"));return;}if(type==="share"){navigator.clipboard?.writeText(location.href);showToast("Short link copied");return;}if(type==="comment"){btn.closest(".tiktok-short").querySelector(".comment-panel").classList.toggle("show");}}
-function addComment(input){const list=input.parentElement.querySelector(".comment-list");if(!input.value.trim())return;const d=document.createElement("div");d.textContent=(localStorage.getItem("vybezUser")||"Guest")+": "+input.value.trim();list.appendChild(d);input.value="";showToast("Comment added");}
+function addComment(input){const list=input.parentElement.querySelector(".comment-list");if(!input.value.trim())return;const d=document.createElement("div");d.textContent=(currentProfile?.displayName||currentUser?.email?.split("@")[0]||"Guest")+": "+input.value.trim();list.appendChild(d);input.value="";showToast("Comment added");}
 document.getElementById("artistSearch")?.addEventListener("input",renderArtists);document.getElementById("artistGenre")?.addEventListener("change",renderArtists);renderArtists();renderShorts();
 
 /* =========================================================
@@ -2785,300 +2802,103 @@ function playTrailer(title) {
 
 
 /* =========================================================
-   ADVANCED AUTHENTICATION
+   SUPABASE AUTHENTICATION
 ========================================================= */
 const loginScreen=document.getElementById("loginScreen"),loginForm=document.getElementById("loginForm"),loginMessage=document.getElementById("loginMessage");
-let pendingSignup=null,demoCode="";
-function setAuthMessage(msg,ok=false){loginMessage.style.color=ok?"#4ade80":"#f87171";loginMessage.textContent=msg;}
+let pendingSignup=null;
+function setAuthMessage(msg,ok=false){if(!loginMessage)return;loginMessage.style.color=ok?"#4ade80":"#f87171";loginMessage.textContent=msg;}
 function switchAuth(mode){document.getElementById("loginTab").classList.toggle("active",mode==="login");document.getElementById("signupTab").classList.toggle("active",mode==="signup");document.getElementById("loginStep").classList.toggle("active",mode==="login");document.getElementById("signupStep").classList.toggle("active",mode==="signup");document.getElementById("verifyStep").classList.remove("active");setAuthMessage("");}
 function updatePasswordMeter(){const p=document.getElementById("signupPassword").value,m=document.getElementById("passwordMeter");const s=Math.min(100,(p.length>=8?45:p.length*5)+(/[A-Z]/.test(p)?15:0)+(/[0-9]/.test(p)?20:0)+(/[^A-Za-z0-9]/.test(p)?20:0));m.style.width=s+"%";m.style.background=s<50?"#ef4444":s<80?"#f59e0b":"#22c55e";}
-function beginSignup(){const name=document.getElementById("signupName").value.trim(),email=document.getElementById("signupEmail").value.trim().toLowerCase(),pass=document.getElementById("signupPassword").value;if(name.length<2)return setAuthMessage("Choose a display name with at least 2 characters.");if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAuthMessage("Enter a valid email address.");if(pass.length<8)return setAuthMessage("Password must contain at least 8 characters.");demoCode=String(Math.floor(100000+Math.random()*900000));pendingSignup={name,email,pass};document.getElementById("signupStep").classList.remove("active");document.getElementById("verifyStep").classList.add("active");clearVerificationBoxes(); setupVerificationBoxes(); focusVerificationBox();setAuthMessage("Demo verification code: "+demoCode,true);
-    startVerificationTimer(10 * 60);
-}
-function resendCode() {
-    if (!pendingSignup) {
-        setAuthMessage("Start signup first so we can send a verification code.", false);
-        return;
-    }
 
-    if (window.verificationResendLocked) return;
+async function beginSignup(){
+    const name=document.getElementById("signupName").value.trim();
+    const email=document.getElementById("signupEmail").value.trim().toLowerCase();
+    const pass=document.getElementById("signupPassword").value;
+    if(name.length<2)return setAuthMessage("Choose a display name with at least 2 characters.");
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAuthMessage("Enter a valid email address.");
+    if(pass.length<8)return setAuthMessage("Password must contain at least 8 characters.");
 
-    demoCode = String(Math.floor(100000 + Math.random() * 900000));
-    window.verificationResendLocked = true;
+    const username=(name.toLowerCase().replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,24)||"member");
+    pendingSignup={name,email,pass,username};
 
+    const {data,error}=await supabase.auth.signUp({
+        email,
+        password:pass,
+        options:{data:{display_name:name,username}}
+    });
+    if(error){pendingSignup=null;return setAuthMessage(error.message);}
+
+    document.getElementById("signupStep").classList.remove("active");
+    document.getElementById("verifyStep").classList.add("active");
     clearVerificationBoxes();
+    setupVerificationBoxes();
     focusVerificationBox();
-
-    setAuthMessage("New verification code: " + demoCode, true);
-
-    const btn = document.getElementById("resendCodeBtn");
-    if (btn) {
-        btn.disabled = true;
-        let seconds = 30;
-        btn.innerHTML = '<i class="fa-solid fa-clock"></i> Resend in ' + seconds + 's';
-
-        clearInterval(window.resendCountdown);
-        window.resendCountdown = setInterval(() => {
-            seconds--;
-
-            if (seconds <= 0) {
-                clearInterval(window.resendCountdown);
-                window.verificationResendLocked = false;
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Resend code';
-            } else {
-                btn.innerHTML = '<i class="fa-solid fa-clock"></i> Resend in ' + seconds + 's';
-            }
-        }, 1000);
-    }
-
-    startVerificationTimer(10 * 60);
+    setAuthMessage("A real 6-digit verification code was sent to your email.",true);
+    startVerificationTimer(10*60);
 }
 
-function clearVerificationTimer() {
-    if (window.verificationTimer) {
-        clearInterval(window.verificationTimer);
-        window.verificationTimer = null;
-    }
-    const timer = document.getElementById("verificationTimer");
-    if (timer) timer.textContent = "";
+async function resendCode(){
+    if(!pendingSignup)return setAuthMessage("Start signup first so we can send a verification code.");
+    if(window.verificationResendLocked)return;
+    const {error}=await supabase.auth.signInWithOtp({email:pendingSignup.email,options:{shouldCreateUser:false}});
+    if(error)return setAuthMessage(error.message);
+    window.verificationResendLocked=true;
+    clearVerificationBoxes();focusVerificationBox();
+    setAuthMessage("A new verification code was sent to your email.",true);
+    const btn=document.getElementById("resendCodeBtn");
+    if(btn){btn.disabled=true;let seconds=60;btn.innerHTML='<i class="fa-solid fa-clock"></i> Resend in '+seconds+'s';clearInterval(window.resendCountdown);window.resendCountdown=setInterval(()=>{seconds--;if(seconds<=0){clearInterval(window.resendCountdown);window.verificationResendLocked=false;btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-rotate"></i> Resend code';}else btn.innerHTML='<i class="fa-solid fa-clock"></i> Resend in '+seconds+'s';},1000);}
+    startVerificationTimer(10*60);
+}
+function clearVerificationTimer(){if(window.verificationTimer){clearInterval(window.verificationTimer);window.verificationTimer=null;}const timer=document.getElementById("verificationTimer");if(timer)timer.textContent="";}
+function startVerificationTimer(seconds){clearVerificationTimer();const timer=document.getElementById("verificationTimer");let remaining=Number(seconds)||600;const render=()=>{const mins=Math.floor(remaining/60),secs=String(remaining%60).padStart(2,"0");if(timer)timer.textContent="Code expires in "+mins+":"+secs;if(remaining<=0){clearVerificationTimer();if(timer)timer.textContent="Code expired. Request a new code.";return;}remaining--;};render();window.verificationTimer=setInterval(render,1000);}
+function setupVerificationBoxes(){const boxes=Array.from(document.querySelectorAll(".verification-digit"));if(!boxes.length||window.verificationBoxesReady)return;window.verificationBoxesReady=true;const sync=()=>boxes.forEach(box=>{box.value=box.value.replace(/\D/g,"").slice(0,1);box.classList.toggle("filled",!!box.value);box.classList.remove("invalid")});boxes.forEach((box,index)=>{box.addEventListener("input",event=>{event.target.value=event.target.value.replace(/\D/g,"").slice(0,1);sync();if(event.target.value&&index<boxes.length-1)boxes[index+1].focus()});box.addEventListener("keydown",event=>{if(event.key==="Backspace"&&!box.value&&index>0){boxes[index-1].value="";boxes[index-1].focus();sync()}else if(event.key==="ArrowLeft"&&index>0){event.preventDefault();boxes[index-1].focus()}else if(event.key==="ArrowRight"&&index<boxes.length-1){event.preventDefault();boxes[index+1].focus()}else if(event.key==="Enter"){event.preventDefault();verifySignup()}});box.addEventListener("paste",event=>{event.preventDefault();const pasted=(event.clipboardData?.getData("text")||"").replace(/\D/g,"").slice(0,6);pasted.split("").forEach((digit,offset)=>{if(boxes[index+offset])boxes[index+offset].value=digit});sync();boxes[Math.min(index+pasted.length,boxes.length-1)].focus()})})}
+function getVerificationCode(){return Array.from(document.querySelectorAll(".verification-digit")).map(box=>box.value.replace(/\D/g,"").slice(0,1)).join("")}
+function clearVerificationBoxes(){document.querySelectorAll(".verification-digit").forEach(box=>{box.value="";box.classList.remove("filled","invalid")})}
+function focusVerificationBox(){const first=document.querySelector(".verification-digit");if(first)setTimeout(()=>first.focus(),80)}
+
+async function verifySignup(){
+    const code=getVerificationCode();
+    if(code.length!==6){document.querySelectorAll(".verification-digit").forEach(box=>box.classList.add("invalid"));return setAuthMessage("Please enter all 6 digits.");}
+    if(!pendingSignup)return setAuthMessage("Your signup session expired. Please start again.");
+    const {data,error}=await supabase.auth.verifyOtp({email:pendingSignup.email,token:code,type:"email"});
+    if(error){document.querySelectorAll(".verification-digit").forEach(box=>box.classList.add("invalid"));return setAuthMessage(error.message);}
+    const {data:pwData,error:pwError}=await supabase.auth.updateUser({password:pendingSignup.pass,data:{display_name:pendingSignup.name,username:pendingSignup.username}});
+    if(pwError)return setAuthMessage(pwError.message);
+    currentUser=pwData.user||data.user;
+    await ensureProfile(currentUser,pendingSignup);
+    pendingSignup=null;clearVerificationTimer();clearInterval(window.resendCountdown);
+    setAuthMessage("Verification successful! Welcome to VybezApp.",true);
+    await showApp(currentUser);
 }
 
-function startVerificationTimer(seconds) {
-    clearVerificationTimer();
-
-    const timer = document.getElementById("verificationTimer");
-    let remaining = Number(seconds) || 600;
-
-    const render = () => {
-        const mins = Math.floor(remaining / 60);
-        const secs = String(remaining % 60).padStart(2, "0");
-        if (timer) timer.textContent = "Code expires in " + mins + ":" + secs;
-
-        if (remaining <= 0) {
-            clearVerificationTimer();
-            if (timer) timer.textContent = "Code expired. Request a new code.";
-            if (window.pendingSignup) window.pendingSignup.code = null;
-            return;
-        }
-        remaining -= 1;
-    };
-
-    render();
-    window.verificationTimer = setInterval(render, 1000);
-}
-
-function setupVerificationBoxes() {
-    const boxes = Array.from(document.querySelectorAll(".verification-digit"));
-    if (!boxes.length || window.verificationBoxesReady) return;
-    window.verificationBoxesReady = true;
-
-    const sync = () => {
-        boxes.forEach(box => {
-            box.value = box.value.replace(/\D/g, "").slice(0, 1);
-            box.classList.toggle("filled", !!box.value);
-            box.classList.remove("invalid");
-        });
-    };
-
-    boxes.forEach((box, index) => {
-        box.addEventListener("input", event => {
-            event.target.value = event.target.value.replace(/\D/g, "").slice(0, 1);
-            sync();
-
-            if (event.target.value && index < boxes.length - 1) {
-                boxes[index + 1].focus();
-            }
-        });
-
-        box.addEventListener("keydown", event => {
-            if (event.key === "Backspace" && !box.value && index > 0) {
-                boxes[index - 1].value = "";
-                boxes[index - 1].focus();
-                sync();
-            } else if (event.key === "ArrowLeft" && index > 0) {
-                event.preventDefault();
-                boxes[index - 1].focus();
-            } else if (event.key === "ArrowRight" && index < boxes.length - 1) {
-                event.preventDefault();
-                boxes[index + 1].focus();
-            } else if (event.key === "Enter") {
-                event.preventDefault();
-                verifySignup();
-            }
-        });
-
-        box.addEventListener("paste", event => {
-            event.preventDefault();
-            const pasted = (event.clipboardData?.getData("text") || "")
-                .replace(/\D/g, "")
-                .slice(0, 6);
-
-            pasted.split("").forEach((digit, offset) => {
-                if (boxes[index + offset]) boxes[index + offset].value = digit;
-            });
-
-            sync();
-            const target = Math.min(index + pasted.length, boxes.length - 1);
-            boxes[target].focus();
-        });
-    });
-}
-
-function getVerificationCode() {
-    return Array.from(document.querySelectorAll(".verification-digit"))
-        .map(box => box.value.replace(/\D/g, "").slice(0, 1))
-        .join("");
-}
-
-function clearVerificationBoxes() {
-    document.querySelectorAll(".verification-digit").forEach(box => {
-        box.value = "";
-        box.classList.remove("filled", "invalid");
-    });
-}
-
-function focusVerificationBox() {
-    const first = document.querySelector(".verification-digit");
-    if (first) setTimeout(() => first.focus(), 80);
-}
-
-function verifySignup() {
-    const message = document.getElementById("loginMessage");
-    const code = getVerificationCode();
-
-    if (code.length !== 6) {
-        document.querySelectorAll(".verification-digit").forEach(box => box.classList.add("invalid"));
-        setAuthMessage("Please enter all 6 digits.", false);
-        return;
-    }
-
-    if (!pendingSignup || code !== demoCode) {
-        document.querySelectorAll(".verification-digit").forEach(box => box.classList.add("invalid"));
-        setAuthMessage("Incorrect code. Please use the latest 6-digit code.", false);
-        return;
-    }
-
-    const account = {
-        username: pendingSignup.name,
-        email: pendingSignup.email,
-        displayName: pendingSignup.name,
-        password: pendingSignup.pass,
-        verified: true,
-        joinedAt: new Date().toISOString()
-    };
-
-    localStorage.setItem("vybezAccount", JSON.stringify(account));
-    localStorage.setItem("vybezLoggedIn", "true");
-
-    pendingSignup = null;
-    demoCode = "";
-
-    clearVerificationTimer();
-    clearInterval(window.resendCountdown);
-
-    setAuthMessage("Verification successful! Welcome to VybezApp.", true);
-    showApp(account);
-}
-document.querySelectorAll(".code-box input").forEach((input,i)=>{input.addEventListener("input",()=>{input.value=input.value.replace(/\D/g,"").slice(-1);if(input.value&&i<5)input.nextElementSibling.focus();});input.addEventListener("keydown",e=>{if(e.key==="Backspace"&&!input.value&&i>0)input.previousElementSibling.focus();});});
-loginForm.addEventListener("submit",e=>{e.preventDefault();const u=document.getElementById("username").value.trim(),p=document.getElementById("password").value,a=JSON.parse(localStorage.getItem("vybezAccount")||"null");if(!u||!p)return setAuthMessage("Enter your login details.");if(a&&(u.toLowerCase()===a.email||u===a.name)&&p===a.password){localStorage.setItem("vybezUser",a.name);localStorage.setItem("vybezMember","true");showApp(a.name);}else if(!a)setAuthMessage("No local account exists yet. Use Sign up to create one.");else setAuthMessage("Login details did not match this local demo account.");});
+loginForm.addEventListener("submit",async e=>{
+    e.preventDefault();
+    const email=document.getElementById("username").value.trim().toLowerCase(),p=document.getElementById("password").value;
+    if(!email||!p)return setAuthMessage("Enter your email and password.");
+    if(!email.includes("@"))return setAuthMessage("Login uses your email address.");
+    const {data,error}=await supabase.auth.signInWithPassword({email,password:p});
+    if(error)return setAuthMessage(error.message);
+    currentUser=data.user;await loadUserData(currentUser);await showApp(currentUser);
+});
 function createAccount(){switchAuth("signup");document.getElementById("signupName").focus();}
-function showGuestMode(){loginScreen.style.display="none";localStorage.setItem("vybezMember","false");applyGuestMode();}
-function handleHeaderAuth(){const member=localStorage.getItem("vybezMember")==="true"&&localStorage.getItem("vybezUser");if(member){navTo("settings");showToast("You are already signed in");}else{loginScreen.style.display="flex";switchAuth("login");}}
-function showApp(username){loginScreen.style.display="none";localStorage.setItem("vybezUser",username);localStorage.setItem("vybezMember","true");document.getElementById("sidebarUsername").textContent=username;document.getElementById("profileName").textContent=username;document.getElementById("avatar").textContent=username.charAt(0).toUpperCase();document.getElementById("accountChip").style.display="flex";document.getElementById("headerAuthBtn").style.display="none";document.getElementById("memberHeadline").textContent="Welcome back, "+username+" — the stage is yours.";document.getElementById("memberCopy").textContent="Your full 1,000-song catalog, artist discovery and interactive Shorts feed are unlocked.";document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-sparkles"></i> Explore';document.getElementById("memberAction").onclick=()=>navTo("music");document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>1,000</strong><span>Tracks unlocked</span></div><div class="stat-card"><strong>'+artistCatalog.length+'+</strong><span>Artists</span></div><div class="stat-card"><strong>6</strong><span>Interactive Shorts</span></div><div class="stat-card"><strong><i class="fa-solid fa-shield-halved"></i></strong><span>Verified member</span></div>';document.getElementById("sidebarUsername").nextElementSibling.textContent="Verified member";
-    updateProfileUI();
+function showGuestMode(){loginScreen.style.display="none";applyGuestMode();}
+function handleHeaderAuth(){if(currentUser){navTo("settings");showToast("You are already signed in");}else{loginScreen.style.display="flex";switchAuth("login");}}
+async function showApp(user){
+    currentUser=user||currentUser;if(!currentUser)return;
+    await loadUserData(currentUser);
+    loginScreen.style.display="none";
+    const p=currentProfile||{};const username=p.displayName||currentUser.email?.split("@")[0]||"Member";
+    document.getElementById("sidebarUsername").textContent=username;document.getElementById("profileName").textContent=username;document.getElementById("avatar").textContent=(p.avatar||username.charAt(0)).toUpperCase();document.getElementById("accountChip").style.display="flex";document.getElementById("headerAuthBtn").style.display="none";document.getElementById("memberHeadline").textContent="Welcome back, "+username+" — the stage is yours.";document.getElementById("memberCopy").textContent="Your full 1,000-song catalog, artist discovery and interactive Shorts feed are unlocked.";document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-sparkles"></i> Explore';document.getElementById("memberAction").onclick=()=>navTo("music");document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>1,000</strong><span>Tracks unlocked</span></div><div class="stat-card"><strong>'+artistCatalog.length+'+</strong><span>Artists</span></div><div class="stat-card"><strong>6</strong><span>Interactive Shorts</span></div><div class="stat-card"><strong><i class="fa-solid fa-shield-halved"></i></strong><span>Verified member</span></div>';document.getElementById("sidebarUsername").nextElementSibling.textContent="Verified member";document.body.classList.add("member-mode");refreshMemberVisualState();updateProfileUI();loadSettingsPlus();
 }
-function applyGuestMode(){document.getElementById("accountChip").style.display="none";document.getElementById("headerAuthBtn").style.display="inline-flex";document.getElementById("memberHeadline").textContent="You're exploring as a guest";document.getElementById("memberCopy").textContent="Log in or create a free account to unlock the full catalog, saved favorites, comments and personalized discovery.";document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-right-to-bracket"></i> Log in';document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>6</strong><span>Guest previews</span></div><div class="stat-card"><strong>1,000</strong><span>Member tracks</span></div><div class="stat-card"><strong>20+</strong><span>Artists to discover</span></div><div class="stat-card"><strong>Free</strong><span>To join</span></div>';document.getElementById("sidebarUsername").textContent="Guest";document.getElementById("sidebarUsername").nextElementSibling.textContent="Preview mode";
-    updateProfileUI();
-}
-function logout(){localStorage.removeItem("vybezUser");localStorage.removeItem("vybezMember");location.reload();}
-
-
+function applyGuestMode(){document.getElementById("accountChip").style.display="none";document.getElementById("headerAuthBtn").style.display="inline-flex";document.getElementById("memberHeadline").textContent="You're exploring as a guest";document.getElementById("memberCopy").textContent="Log in or create a free account to unlock the full catalog, saved favorites, comments and personalized discovery.";document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-right-to-bracket"></i> Log in';document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>6</strong><span>Guest previews</span></div><div class="stat-card"><strong>1,000</strong><span>Member tracks</span></div><div class="stat-card"><strong>20+</strong><span>Artists to discover</span></div><div class="stat-card"><strong>Free</strong><span>To join</span></div>';document.getElementById("sidebarUsername").textContent="Guest";document.getElementById("sidebarUsername").nextElementSibling.textContent="Preview mode";document.body.classList.remove("member-mode");updateProfileUI();}
+async function logout(){await supabase.auth.signOut();currentUser=null;currentProfile=null;currentSettings=null;location.reload();}
 
 /* =========================================================
-   DARK MODE
+   DATABASE-BACKED SETTINGS
 ========================================================= */
-
-function loadDarkMode() {
-
-    const dark =
-        localStorage.getItem(
-            "vybezDarkMode"
-        ) === "true";
-
-
-    document.body.classList.toggle(
-        "dark",
-        dark
-    );
-
-
-    document
-        .getElementById(
-            "darkModeToggle"
-        )
-        .classList.toggle(
-            "active",
-            dark
-        );
-
-}
-
-
-function toggleDarkMode() {
-
-    const dark =
-        document.body
-            .classList
-            .toggle("dark");
-
-
-    localStorage.setItem(
-        "vybezDarkMode",
-        dark
-    );
-
-
-    document
-        .getElementById(
-            "darkModeToggle"
-        )
-        .classList.toggle(
-            "active",
-            dark
-        );
-
-}
-
-
-/* =========================================================
-   SETTINGS
-========================================================= */
-
-function toggleSetting(
-    element,
-    settingName
-) {
-
-    element.classList.toggle(
-        "active"
-    );
-
-
-    const enabled =
-        element.classList.contains(
-            "active"
-        );
-
-
-    localStorage.setItem(
-        "vybez_" +
-        settingName,
-        enabled
-    );
-
-}
-
+async function loadDarkMode(){const dark=currentSettings?.dark_mode===true;document.body.classList.toggle("dark",dark);document.getElementById("darkModeToggle")?.classList.toggle("active",dark);}
+async function toggleDarkMode(){const dark=!document.body.classList.contains("dark");document.body.classList.toggle("dark",dark);document.getElementById("darkModeToggle")?.classList.toggle("active",dark);await saveUserSettings({dark_mode:dark});}
+async function toggleSetting(element,settingName){element.classList.toggle("active");const enabled=element.classList.contains("active");await saveUserSettings({[settingName]:enabled});}
 
 /* =========================================================
    NAVIGATION
@@ -3705,12 +3525,6 @@ function showToast(message) {
    START APP
 ========================================================= */
 
-loadDarkMode();
-const savedUser=localStorage.getItem("vybezUser"),savedMember=localStorage.getItem("vybezMember")==="true";
-if(savedUser&&savedMember){showApp(savedUser);}else{loginScreen.style.display="none";applyGuestMode();}
-
-
-
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
         setupVerificationBoxes();
@@ -3750,24 +3564,37 @@ const profileStatuses = [
     "💫 Living my best life"
 ];
 
-function getProfileData() {
-    const saved = JSON.parse(localStorage.getItem("vybezProfile") || "null");
-    const account = JSON.parse(localStorage.getItem("vybezAccount") || "null");
-    const base = {...defaultProfile, ...(saved || {})};
-
-    if (account) {
-        base.displayName = base.displayName !== defaultProfile.displayName
-            ? base.displayName : (account.displayName || account.username || "Vybez Member");
-        base.username = base.username !== "guest"
-            ? base.username : (account.username || "member");
-        if (!base.joinedAt) base.joinedAt = account.joinedAt || new Date().toISOString();
-    }
-
-    return base;
+function getProfileData(){return {...defaultProfile,...(currentProfile||{})};}
+async function loadUserData(user){
+    if(!user){currentProfile=null;currentSettings=null;return;}
+    const [{data:profile},{data:settings}]=await Promise.all([
+        supabase.from("profiles").select("*").eq("id",user.id).maybeSingle(),
+        supabase.from("user_settings").select("*").eq("user_id",user.id).maybeSingle()
+    ]);
+    currentProfile=profile?{...profile,displayName:profile.display_name,username:profile.username,status:profile.status,bio:profile.bio,location:profile.location,website:profile.website,avatar:profile.avatar,accent:profile.accent,posts:profile.posts,followers:profile.followers,following:profile.following,likes:profile.likes,showActivity:profile.show_activity,showFollowers:profile.show_followers,privateProfile:profile.private_account,joinedAt:profile.joined_at}:{...defaultProfile,id:user.id,displayName:user.user_metadata?.display_name||user.email?.split("@")[0]||"Vybez Member",username:user.user_metadata?.username||"member",joinedAt:user.created_at};
+    currentSettings=settings||null;
+    await loadDarkMode();
 }
-
-function saveProfileData(profile) {
-    localStorage.setItem("vybezProfile", JSON.stringify(profile));
+async function ensureProfile(user,signup){
+    if(!user)return;
+    const payload={id:user.id,username:signup?.username||user.user_metadata?.username||("member_"+user.id.slice(0,6)),display_name:signup?.name||user.user_metadata?.display_name||user.email?.split("@")[0]||"Vybez Member",status:"Exploring Vybez ✨",bio:defaultProfile.bio,location:"",website:"",avatar:(signup?.name||"V").charAt(0).toUpperCase(),accent:"blue",joined_at:user.created_at};
+    const {data,error}=await supabase.from("profiles").upsert(payload,{onConflict:"id"}).select().single();
+    if(error)console.error("Profile create error:",error);else currentProfile=data;
+    const {data:settings}=await supabase.from("user_settings").upsert({user_id:user.id,dark_mode:false,show_activity:true,show_followers:true,private_account:false,likes:true,comments:true,followers:true,messages:true,activity:true,follower_count:true,discovery:true,autoplay:true,data_saver:false},{onConflict:"user_id"}).select().single();
+    currentSettings=settings||currentSettings;
+}
+async function saveProfileData(profile){
+    if(!currentUser)return;
+    currentProfile={...getProfileData(),...profile};
+    const payload={id:currentUser.id,username:currentProfile.username,display_name:currentProfile.displayName,status:currentProfile.status,bio:currentProfile.bio,location:currentProfile.location,website:currentProfile.website,avatar:currentProfile.avatar,accent:currentProfile.accent,show_activity:currentProfile.showActivity,show_followers:currentProfile.showFollowers,private_account:currentProfile.privateProfile};
+    const {data,error}=await supabase.from("profiles").upsert(payload,{onConflict:"id"}).select().single();
+    if(error){console.error(error);showToast(error.message);return;}currentProfile={...data,displayName:data.display_name,username:data.username,status:data.status,bio:data.bio,location:data.location,website:data.website,avatar:data.avatar,accent:data.accent,posts:data.posts,followers:data.followers,following:data.following,likes:data.likes,showActivity:data.show_activity,showFollowers:data.show_followers,privateProfile:data.private_account,joinedAt:data.joined_at};updateProfileUI();
+}
+async function saveUserSettings(changes={}){
+    if(!currentUser)return;
+    const payload={user_id:currentUser.id,...changes};
+    const {data,error}=await supabase.from("user_settings").upsert(payload,{onConflict:"user_id"}).select().single();
+    if(error){console.error(error);showToast(error.message);return;}currentSettings={...currentSettings,...data};await loadDarkMode();
 }
 
 function updateProfileUI() {
@@ -3853,74 +3680,28 @@ function closeProfileEditor() {
     document.getElementById("profileEditorModal")?.classList.remove("active");
 }
 
-function saveProfile() {
-    const p = getProfileData();
-    p.displayName = document.getElementById("editDisplayName").value.trim() || "Vybez Guest";
-    p.username = document.getElementById("editUsername").value.trim().replace(/^@/,"").replace(/\s+/g,"_") || "guest";
-    p.status = document.getElementById("editStatus").value.trim() || "Exploring Vybez ✨";
-    p.bio = document.getElementById("editBio").value.trim() || defaultProfile.bio;
-    p.location = document.getElementById("editLocation").value.trim();
-    p.website = document.getElementById("editWebsite").value.trim();
-
-    saveProfileData(p);
-
-    const account = JSON.parse(localStorage.getItem("vybezAccount") || "null");
-    if (account) {
-        account.displayName = p.displayName;
-        account.username = p.username;
-        localStorage.setItem("vybezAccount", JSON.stringify(account));
-    }
-
-    updateProfileUI();
-    closeProfileEditor();
-    showToast("Profile updated ✨");
+async function saveProfile(){
+    const p=getProfileData();
+    p.displayName=document.getElementById("editDisplayName").value.trim()||"Vybez Member";
+    p.username=document.getElementById("editUsername").value.trim().replace(/^@/,"").replace(/\s+/g,"_").toLowerCase()||"member";
+    p.status=document.getElementById("editStatus").value.trim()||"Exploring Vybez ✨";
+    p.bio=document.getElementById("editBio").value.trim()||defaultProfile.bio;
+    p.location=document.getElementById("editLocation").value.trim();
+    p.website=document.getElementById("editWebsite").value.trim();
+    await saveProfileData(p);closeProfileEditor();showToast("Profile updated ✨");
 }
 
-function saveProfilePreferences() {
-    const p = getProfileData();
-    p.showActivity = document.getElementById("showActivityToggle")?.checked !== false;
-    p.showFollowers = document.getElementById("showFollowersToggle")?.checked !== false;
-    p.privateProfile = document.getElementById("privateProfileToggle")?.checked === true;
-    saveProfileData(p);
-    updateProfileUI();
-    showToast("Profile preferences saved");
+async function saveProfilePreferences(){
+    const p=getProfileData();
+    p.showActivity=document.getElementById("showActivityToggle")?.checked!==false;
+    p.showFollowers=document.getElementById("showFollowersToggle")?.checked!==false;
+    p.privateProfile=document.getElementById("privateProfileToggle")?.checked===true;
+    await saveProfileData(p);await saveUserSettings({show_activity:p.showActivity,show_followers:p.showFollowers,private_account:p.privateProfile});updateProfileUI();showToast("Profile preferences saved");
 }
-
-function setProfileAccent(accent) {
-    const p = getProfileData();
-    p.accent = accent;
-    saveProfileData(p);
-    updateProfileUI();
-}
-
-function changeCoverStyle() {
-    const order = ["blue","purple","pink","green","orange"];
-    const p = getProfileData();
-    p.accent = order[(order.indexOf(p.accent) + 1) % order.length];
-    saveProfileData(p);
-    updateProfileUI();
-    showToast("Profile style changed");
-}
-
-function changeAvatar() {
-    const p = getProfileData();
-    const avatar = prompt("Enter one emoji or a single letter for your profile photo:", p.avatar || "V");
-    if (avatar === null) return;
-    const clean = Array.from(avatar.trim()).slice(0, 2).join("");
-    if (!clean) return;
-    p.avatar = clean;
-    saveProfileData(p);
-    updateProfileUI();
-}
-
-function cycleStatus() {
-    const p = getProfileData();
-    const current = profileStatuses.indexOf(p.status);
-    p.status = profileStatuses[(current + 1) % profileStatuses.length];
-    saveProfileData(p);
-    updateProfileUI();
-    showToast("Status changed");
-}
+async function setProfileAccent(accent){const p=getProfileData();p.accent=accent;await saveProfileData(p);updateProfileUI();}
+async function changeCoverStyle(){const order=["blue","purple","pink","green","orange"],p=getProfileData();p.accent=order[(order.indexOf(p.accent)+1)%order.length];await saveProfileData(p);updateProfileUI();showToast("Profile style changed");}
+async function changeAvatar(){const p=getProfileData(),avatar=prompt("Enter one emoji or a single letter for your profile photo:",p.avatar||"V");if(avatar===null)return;const clean=Array.from(avatar.trim()).slice(0,2).join("");if(!clean)return;p.avatar=clean;await saveProfileData(p);updateProfileUI();}
+async function cycleStatus(){const p=getProfileData(),current=profileStatuses.indexOf(p.status);p.status=profileStatuses[(current+1)%profileStatuses.length];await saveProfileData(p);updateProfileUI();showToast("Status changed");}
 
 function shareProfile() {
     const p = getProfileData();
@@ -3937,18 +3718,12 @@ function shareProfile() {
 
 
 function refreshMemberVisualState(){
-  const account = JSON.parse(localStorage.getItem('vybezAccount') || 'null');
-  const loggedIn = !!(account && account.loggedIn);
-  document.body.classList.toggle('member-mode', loggedIn);
-  const pill = document.getElementById('memberLivePill');
-  if (pill) pill.style.display = loggedIn ? 'inline-flex' : 'none';
+  const loggedIn=!!currentUser;
+  document.body.classList.toggle('member-mode',loggedIn);
+  const pill=document.getElementById('memberLivePill');if(pill)pill.style.display=loggedIn?'inline-flex':'none';
 }
 
-function initProfileExperience() {
-    updateProfileUI();
-}
-
-initProfileExperience();
+function initProfileExperience(){updateProfileUI();}
 refreshMemberVisualState();
 
 </script>
@@ -4019,58 +3794,61 @@ refreshMemberVisualState();
 </div>
 
 <script>
-
-// Fresh logged-in state: never present an ambiguous guest-like account chip.
-(function(){
-  const sync = () => {
-    const account = JSON.parse(localStorage.getItem('vybezAccount') || 'null');
-    const logged = !!(account && account.loggedIn);
-    document.querySelectorAll('[data-account-chip], .account-chip').forEach(el => {
-      if (logged && !/signed in/i.test(el.textContent)) {
-        const name = account.displayName || account.username || 'Member';
-        el.innerHTML = '👤 ' + name + ' <span class="logged-in-nav-badge"></span>';
-        el.title = 'Signed in account';
-      }
-    });
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sync);
-  else sync();
-})();
-
+// Fresh logged-in state: uses the live Supabase session.
+function syncAccountChip(){
+  const logged=!!currentUser;
+  document.querySelectorAll('[data-account-chip], .account-chip').forEach(el=>{
+    if(logged){const name=currentProfile?.displayName||currentUser?.email?.split('@')[0]||'Member';el.innerHTML='👤 '+escapeHTML(name)+' <span class="logged-in-nav-badge"></span>';el.title='Signed in account';}
+  });
+}
 </script>
 
 <script>
 (function(){
-  const KEY='vybezSettingsPlus';
-  const defaults={likes:true,comments:true,followers:true,messages:true,activity:true,followerCount:true,discovery:true,autoplay:true,dataSaver:false,dark:true};
-  window.loadSettingsPlus=function(){
-    let s={...defaults};
-    try{s={...s,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch(e){}
-    const map={setLikes:'likes',setComments:'comments',setFollowers:'followers',setMessages:'messages',setActivity:'activity',setFollowerCount:'followerCount',setDiscovery:'discovery',setAutoplay:'autoplay',setDataSaver:'dataSaver',setDark:'dark'};
+  const defaults={likes:true,comments:true,followers:true,messages:true,activity:true,followerCount:true,discovery:true,autoplay:true,dataSaver:false,dark:false};
+  window.loadSettingsPlus=async function(){
+    if(!currentUser)return;
+    const s={...defaults,...(currentSettings||{})};
+    const map={setLikes:'likes',setComments:'comments',setFollowers:'followers',setMessages:'messages',setActivity:'activity',setFollowerCount:'follower_count',setDiscovery:'discovery',setAutoplay:'autoplay',setDataSaver:'data_saver',setDark:'dark_mode'};
     Object.entries(map).forEach(([id,k])=>{const el=document.getElementById(id);if(el)el.checked=!!s[k]});
-    const p=JSON.parse(localStorage.getItem('vybezProfile')||'{}');
-    const a=JSON.parse(localStorage.getItem('vybezAccount')||'{}');
-    const n=document.getElementById('settingsUserName');
-    if(n)n.textContent=p.displayName||a.displayName||a.username||'Your Vybez account';
-    const accent=document.getElementById('setAccent'); if(accent&&p.accent)accent.value=p.accent;
+    const n=document.getElementById('settingsUserName');if(n)n.textContent=currentProfile?.displayName||currentUser.email||'Your Vybez account';
+    const accent=document.getElementById('setAccent');if(accent&&currentProfile?.accent)accent.value=currentProfile.accent;
   };
-  window.saveSettingsPlus=function(){
+  window.saveSettingsPlus=async function(){
+    if(!currentUser)return;
     const ids=['setLikes','setComments','setFollowers','setMessages','setActivity','setFollowerCount','setDiscovery','setAutoplay','setDataSaver','setDark'];
-    const keys=['likes','comments','followers','messages','activity','followerCount','discovery','autoplay','dataSaver','dark'];
-    const s={};ids.forEach((id,i)=>{const e=document.getElementById(id);if(e)s[keys[i]]=e.checked});
-    localStorage.setItem(KEY,JSON.stringify(s));
-    const p=JSON.parse(localStorage.getItem('vybezProfile')||'{}');
-    p.showActivity=s.activity;p.showFollowers=s.followerCount;p.privateProfile=!s.discovery;
-    localStorage.setItem('vybezProfile',JSON.stringify(p));
+    const keys=['likes','comments','followers','messages','activity','follower_count','discovery','autoplay','data_saver','dark_mode'];
+    const s={};ids.forEach((id,i)=>{const e=document.getElementById(id);if(e)s[keys[i]]=!!e.checked});
+    await saveUserSettings(s);
+    const p=getProfileData();p.showActivity=s.activity;p.showFollowers=s.follower_count;p.privateProfile=!s.discovery;await saveProfileData(p);
+    showToast('Settings saved');
   };
-  window.toggleSettingsDark=function(on){document.body.classList.toggle('light-mode',!on);saveSettingsPlus()};
-  window.resetSettingsPlus=function(){
-    if(!confirm('Reset Vybez settings to their defaults?'))return;
-    localStorage.removeItem(KEY);loadSettingsPlus();
-  };
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadSettingsPlus);else loadSettingsPlus();
+  window.toggleSettingsDark=async function(on){document.body.classList.toggle('light-mode',!on);await saveUserSettings({dark_mode:on});};
+  window.resetSettingsPlus=async function(){if(!confirm('Reset Vybez settings to their defaults?'))return;const s={likes:true,comments:true,followers:true,messages:true,activity:true,follower_count:true,discovery:true,autoplay:true,data_saver:false,dark_mode:false};await saveUserSettings(s);await loadSettingsPlus();showToast('Settings reset');};
 })();
 </script>
 
+
+<script>
+/* =========================================================
+   SUPABASE APP INITIALIZATION
+========================================================= */
+async function initSupabaseApp(){
+  if(!SUPABASE_URL || SUPABASE_URL.includes('YOUR_SUPABASE') || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_PUBLISHABLE_KEY.includes('YOUR_SUPABASE')){
+    console.warn('VybezApp: add your Supabase URL and publishable key in SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY.');
+    loginScreen.style.display='none';applyGuestMode();return;
+  }
+  try{
+    const {data:{session}}=await supabase.auth.getSession();
+    if(session?.user){currentUser=session.user;await loadUserData(currentUser);await showApp(currentUser);syncAccountChip();}
+    else{loginScreen.style.display='none';applyGuestMode();}
+    supabase.auth.onAuthStateChange(async(_event,session)=>{
+      if(session?.user){currentUser=session.user;await loadUserData(currentUser);await showApp(currentUser);syncAccountChip();}
+      else{currentUser=null;currentProfile=null;currentSettings=null;applyGuestMode();}
+    });
+  }catch(error){console.error(error);setAuthMessage(error.message||'Could not connect to Supabase.');loginScreen.style.display='flex';}
+}
+initSupabaseApp();
+</script>
 </body>
 </html>
