@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,8 +22,14 @@
 ========================================================= */
 const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
 const SUPABASE_PUBLISHABLE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY";
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const SUPABASE_CONFIGURED = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(SUPABASE_URL)
+    && !!SUPABASE_PUBLISHABLE_KEY
+    && !SUPABASE_PUBLISHABLE_KEY.includes("YOUR_SUPABASE");
+const supabase = SUPABASE_CONFIGURED
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+    : null;
 let currentUser = null;
+let currentPosts = [];
 let currentProfile = null;
 let currentSettings = null;
 </script>
@@ -1510,9 +1515,39 @@ body.member-mode .profile-shell {
 @media(max-width:650px){.settings-row{align-items:flex-start}.settings-row>div:first-child{min-width:0}.settings-row{flex-wrap:wrap}.settings-row .settings-control{margin-left:auto}}
 
 </style>
+<style id="vybez-final-layout-fixes">
+body.dark #profile .profile-panel,
+body.dark #profile .profile-posts-panel,
+body.dark #settings .settings-card {background:#111827;border-color:#273449;color:#f8fafc}
+body.dark #profile .profile-main-card {background:#101827;border-color:#2b3950}
+body.dark #profile .profile-stat {background:#111827;border-color:#273449}
+body.dark #profile .profile-bio {color:#d1d5db}
+body.dark #settings .settings-row {border-color:#273449}
+body.dark #settings .settings-note,body.dark #settings small {color:#a7b2c4}
+#profile .profile-posts-panel {margin:16px 18px;padding:20px;border:1px solid #273449;border-radius:20px;background:#111827}
+.profile-posts-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.profile-post-tile {aspect-ratio:1/1;overflow:hidden;border-radius:12px;background:#1e293b}
+.profile-post-tile img,.profile-post-tile video {width:100%;height:100%;object-fit:cover;display:block}
+.profile-post-empty {grid-column:1/-1;min-height:145px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#94a3b8;border:1px dashed #334155;border-radius:14px}
+.profile-post-empty i {font-size:30px;color:#60a5fa}
+.profile-post-empty strong {color:#e5e7eb}
+#profile .profile-avatar img,#editorAvatar img {width:100%;height:100%;object-fit:cover;border-radius:inherit}
+#shorts .shorts-feed {height:auto;min-height:0;max-height:none;overflow:visible;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:stretch;gap:16px;padding:4px 0 24px}
+#shorts .tiktok-short {width:100%;height:390px;min-height:0;max-height:430px;border-radius:16px;scroll-snap-align:none}
+#shorts .short-actions {gap:8px;right:9px;bottom:12px}
+#shorts .short-action {width:40px;height:40px;font-size:16px}
+#shorts .short-action span {font-size:9px}
+#shorts .short-content {inset:auto 58px 16px 14px}
+#shorts .short-content h3 {font-size:17px}
+#shorts .comment-panel {right:55px;width:min(220px,65%);bottom:12px}
+#settings .settings-card {max-width:none}
+#settings .settings-row {min-height:56px}
+@media(max-width:760px){#profile .profile-posts-panel{margin:12px 8px}.profile-posts-grid{grid-template-columns:repeat(3,minmax(0,1fr))}#shorts .shorts-feed{grid-template-columns:repeat(2,minmax(0,1fr))}#shorts .tiktok-short{height:330px}}
+@media(max-width:480px){#shorts .shorts-feed{grid-template-columns:1fr}#shorts .tiktok-short{height:420px;max-width:360px;margin:0 auto;width:100%}.profile-posts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
 </head>
 
-<body class="member-mode"
+<body class="dark">
 
 
 <!-- =======================================================
@@ -1547,8 +1582,8 @@ body.member-mode .profile-shell {
     </div>
 
     <p class="verify-note">
-        Enter the 6-digit verification code shown by this demo.
-        In a production app, the code should be delivered by secure email/SMS.
+        Enter the 6-digit verification code sent to your email.
+        Check your inbox and spam folder for the verification email.
     </p>
 
     <div class="code-box" id="verificationBoxes" aria-label="6 digit verification code">
@@ -1572,7 +1607,7 @@ body.member-mode .profile-shell {
 </div>
 <div class="login-message" id="loginMessage"></div>
 </form>
-<div style="text-align:center;margin-top:10px;color:#667085;font-size:11px;">Stage access • Personalized mode • Local demo authentication</div>
+<div style="text-align:center;margin-top:10px;color:#667085;font-size:11px;">Secure account access • Personalized mode</div>
 </div>
 </div>
 <!-- =======================================================
@@ -1611,6 +1646,11 @@ body.member-mode .profile-shell {
         <button data-page="shorts">
             <i class="fa-solid fa-circle-play"></i>
             Shorts
+        </button>
+
+        <button data-page="profile">
+            <i class="fa-solid fa-user"></i>
+            Profile
         </button>
 
         <button data-page="settings">
@@ -1712,7 +1752,7 @@ body.member-mode .profile-shell {
 
             <div class="profile">
 <button class="primary-btn" id="headerAuthBtn" type="button" onclick="handleHeaderAuth()"><i class="fa-solid fa-right-to-bracket"></i> <span id="headerAuthText">Log in</span></button>
-<div class="account-chip" id="accountChip" style="display:none;"><div class="avatar" id="avatar">V</div><span id="profileName">Guest</span><span class="auth-badge"><i class="fa-solid fa-check"></i></span></div>
+<div class="account-chip" id="accountChip" style="display:none;cursor:pointer;" role="button" tabindex="0" onclick="navTo('profile')"><div class="avatar" id="avatar">V</div><span id="profileName">Guest</span><span class="auth-badge"><i class="fa-solid fa-check"></i></span></div>
 </div>
 
         </div>
@@ -1983,9 +2023,10 @@ body.member-mode .profile-shell {
     <div class="profile-main-card">
         <div class="profile-avatar-wrap">
             <div class="profile-avatar" id="profileAvatar">V</div>
-            <button class="avatar-edit-btn" type="button" onclick="changeAvatar()" title="Change profile photo">
+            <button class="avatar-edit-btn" type="button" onclick="document.getElementById('profilePhotoInput').click()" title="Upload profile photo">
                 <i class="fa-solid fa-camera"></i>
             </button>
+            <input id="profilePhotoInput" type="file" accept="image/*" hidden onchange="uploadProfilePhoto(this)">
         </div>
 
         <div class="profile-identity">
@@ -1994,7 +2035,7 @@ body.member-mode .profile-shell {
                 <span id="profileVerifiedBadge" class="verified-badge"><i class="fa-solid fa-check"></i></span>
             </div>
             <p id="profileUsername">@guest</p>
-            <div class="profile-status-pill" id="profileStatusPill" role="button" tabindex="0">
+            <div class="profile-status-pill" id="profileStatusPill" role="button" tabindex="0" onclick="cycleStatus()">
                 <span class="status-dot"></span>
                 <span id="profileStatusText">Exploring Vybez ✨</span>
             </div>
@@ -2015,6 +2056,16 @@ body.member-mode .profile-shell {
         <div class="profile-stat" role="button" tabindex="0"><strong id="profileFollowers">0</strong><span>Followers</span></div>
         <div class="profile-stat" role="button" tabindex="0"><strong id="profileFollowing">0</strong><span>Following</span></div>
         <div class="profile-stat" role="button" tabindex="0"><strong id="profileLikes">0</strong><span>Likes</span></div>
+    </div>
+
+    <div class="profile-posts-panel">
+        <div class="profile-panel-head">
+            <h3><i class="fa-solid fa-table-cells"></i> Posts</h3>
+            <span class="muted">Photos and videos you've shared</span>
+        </div>
+        <div id="profilePostsGrid" class="profile-posts-grid">
+            <div class="profile-post-empty"><i class="fa-regular fa-images"></i><strong>No posts yet</strong><span>Your posts will appear here.</span></div>
+        </div>
     </div>
 
     <div class="profile-content-grid">
@@ -2091,7 +2142,7 @@ body.member-mode .profile-shell {
   <div class="settings-card">
     <h3>🎨 Appearance</h3><p>Make Vybez feel the way you want.</p>
     <div class="settings-row"><div><strong>Dark mode</strong><small>Use the dark Vybez interface.</small></div><label class="settings-toggle"><input id="setDark" type="checkbox" checked onchange="toggleSettingsDark(this.checked)"><span class="settings-slider"></span></label></div>
-    <div class="settings-row"><div><strong>Accent style</strong><small>Change your profile accent.</small></div><select id="setAccent" class="settings-select" onchange="setProfileAccent(this.value)"><option value="#7c3aed">Violet</option><option value="#ec4899">Pink</option><option value="#06b6d4">Cyan</option><option value="#22c55e">Green</option><option value="#f59e0b">Gold</option></select></div>
+    <div class="settings-row"><div><strong>Accent style</strong><small>Change your profile accent.</small></div><select id="setAccent" class="settings-select" onchange="setProfileAccent(this.value)"><option value="blue">Blue</option><option value="purple">Violet</option><option value="pink">Pink</option><option value="green">Green</option><option value="orange">Orange</option></select></div>
     <div class="settings-row"><div><strong>Cover style</strong><small>Cycle your profile cover design.</small></div><button class="settings-btn" onclick="changeCoverStyle()">Change cover</button></div>
   </div>
 
@@ -2117,10 +2168,10 @@ body.member-mode .profile-shell {
   </div>
 
   <div class="settings-card">
-    <h3>💾 Your Vybez data</h3><p>Manage locally stored app preferences on this browser.</p>
+    <h3>💾 Your Vybez data</h3><p>Manage preferences saved to your Vybez account.</p>
     <div class="settings-row"><div><strong>Reset preferences</strong><small>Restore settings to their defaults.</small></div><button class="settings-btn" onclick="resetSettingsPlus()">Reset</button></div>
     <div class="settings-row"><div><strong>Sign out</strong><small>Leave the current account on this device.</small></div><button class="settings-btn settings-danger" onclick="signOut()">Sign out</button></div>
-    <div class="settings-note">Current authentication and profile data are stored locally in this browser.</div>
+    <div class="settings-note">Account settings and profile data are saved to your Supabase project.</div>
   </div>
 </section>
 
@@ -2380,7 +2431,8 @@ createMovieCards("moviesGrid");
 const artistCatalog=[
 {name:"Kato Waves",genre:"Afrobeats",followers:"128K"},{name:"Nia Sol",genre:"Afropop",followers:"96K"},{name:"Luma Ray",genre:"Amapiano",followers:"211K"},{name:"Juno K",genre:"Afro-fusion",followers:"74K"},{name:"Maya Vee",genre:"Afrobeats",followers:"302K"},{name:"Zuri Tone",genre:"Afropop",followers:"81K"},{name:"Kampala Kings",genre:"Amapiano",followers:"187K"},{name:"Nova K",genre:"Afro-fusion",followers:"66K"},{name:"Asha Blue",genre:"Afrobeats",followers:"143K"},{name:"Tano Beats",genre:"Afropop",followers:"59K"},{name:"Rico Sun",genre:"Dancehall",followers:"119K"},{name:"Imani Gold",genre:"Afro-fusion",followers:"88K"},{name:"Safi Rose",genre:"Afrobeats",followers:"174K"},{name:"Dara Flux",genre:"Amapiano",followers:"221K"},{name:"Leo Pulse",genre:"Afropop",followers:"72K"},{name:"Kira Moon",genre:"Afro-fusion",followers:"101K"},{name:"Mika Ray",genre:"Afrobeats",followers:"156K"},{name:"Ayo Nova",genre:"Afropop",followers:"133K"},{name:"Zane Fire",genre:"Dancehall",followers:"109K"},{name:"Lia Sky",genre:"Amapiano",followers:"196K"}];
 const shortData=[["Behind the Scenes","Kato Waves","New studio energy","dQw4w9WgXcQ"],["Movie Moments","Nia Sol","A scene worth replaying","M7lc1UVf-VE"],["Funny Auditions","Luma Ray","The stage was NOT ready","ScMzIvxBSi4"],["Music Challenge","Juno K","Can you match the beat?","ysz5S6PUM-U"],["Late Night Session","Maya Vee","One take. No edits.","dQw4w9WgXcQ"],["Amapiano Move","Dara Flux","Show us your version","M7lc1UVf-VE"]];
-function navTo(pageName){navButtons.forEach(b=>b.classList.toggle("active",b.dataset.page===pageName));pages.forEach(p=>p.classList.toggle("active",p.id===pageName));}
+function navTo(pageName){navButtons.forEach(b=>b.classList.toggle("active",b.dataset.page===pageName));pages.forEach(p=>p.classList.toggle("active",p.id===pageName));document.getElementById("sidebar")?.classList.remove("open");if(pageName==="profile")updateProfileUI();if(pageName==="settings")loadSettingsPlus();}
+function showPage(pageName){navTo(pageName);}
 function renderArtists(){const grid=document.getElementById("artistGrid");if(!grid)return;const q=(document.getElementById("artistSearch")?.value||"").toLowerCase().trim(),g=document.getElementById("artistGenre")?.value||"all";const list=artistCatalog.filter(a=>(g==="all"||a.genre===g)&&(!q||a.name.toLowerCase().includes(q)||a.genre.toLowerCase().includes(q)));grid.innerHTML=list.map(a=>`<div class="artist-card" onclick="openArtist('${escapeHTML(a.name)}')"><div class="artist-avatar">${escapeHTML(a.name.split(" ").map(x=>x[0]).join("").slice(0,2))}</div><h3>${escapeHTML(a.name)} <span class="artist-verified"><i class="fa-solid fa-circle-check"></i></span></h3><p>${escapeHTML(a.genre)} • ${escapeHTML(a.followers)} followers</p></div>`).join("")||`<div class="no-results" style="grid-column:1/-1"><i class="fa-solid fa-microphone-lines"></i><h3>No artists found</h3><p>Try another name or genre.</p></div>`;}
 function openArtist(name){const a=artistCatalog.find(x=>x.name===name);if(!a)return;document.getElementById("musicSearch").value=name;document.getElementById("genreFilter").value="all";navTo("music");renderMusic();showToast(name+" • "+a.genre);}
 function renderShorts(){const feed=document.getElementById("shortsFeed");if(!feed)return;feed.innerHTML=shortData.map((s,i)=>`<article class="tiktok-short" data-short="${i}"><div class="short-bg"></div><div class="short-noise"></div><div class="short-progress"><i></i></div><div class="short-content"><div class="short-creator"><span class="short-mini-avatar">${escapeHTML(s[1][0])}</span>@${escapeHTML(s[1])} <span class="artist-verified"><i class="fa-solid fa-circle-check"></i></span></div><h3>${escapeHTML(s[0])}</h3><p>${escapeHTML(s[2])} • #VybezApp #Shorts</p></div><div class="short-actions"><button class="short-action" onclick="shortAction(this,'like')"><i class="fa-solid fa-heart"></i><span>Like</span></button><button class="short-action" onclick="shortAction(this,'comment')"><i class="fa-solid fa-comment"></i><span>Comment</span></button><button class="short-action" onclick="shortAction(this,'share')"><i class="fa-solid fa-share"></i><span>Share</span></button><button class="short-action" onclick="shortAction(this,'save')"><i class="fa-solid fa-bookmark"></i><span>Save</span></button><button class="short-action" onclick="openVideo('${s[3]}','${escapeHTML(s[0])}')"><i class="fa-solid fa-play"></i><span>Watch</span></button></div><div class="comment-panel"><h4>Comments</h4><div class="comment-list"><div>Be the first to comment.</div></div><input placeholder="Add a comment..." onkeydown="if(event.key==='Enter')addComment(this)"></div></article>`).join("");}
@@ -2811,40 +2863,31 @@ function switchAuth(mode){document.getElementById("loginTab").classList.toggle("
 function updatePasswordMeter(){const p=document.getElementById("signupPassword").value,m=document.getElementById("passwordMeter");const s=Math.min(100,(p.length>=8?45:p.length*5)+(/[A-Z]/.test(p)?15:0)+(/[0-9]/.test(p)?20:0)+(/[^A-Za-z0-9]/.test(p)?20:0));m.style.width=s+"%";m.style.background=s<50?"#ef4444":s<80?"#f59e0b":"#22c55e";}
 
 async function beginSignup(){
+    if(!supabase)return setAuthMessage("Connect your Supabase Project URL and Publishable Key first.");
     const name=document.getElementById("signupName").value.trim();
     const email=document.getElementById("signupEmail").value.trim().toLowerCase();
     const pass=document.getElementById("signupPassword").value;
     if(name.length<2)return setAuthMessage("Choose a display name with at least 2 characters.");
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return setAuthMessage("Enter a valid email address.");
+    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return setAuthMessage("Enter a valid email address.");
     if(pass.length<8)return setAuthMessage("Password must contain at least 8 characters.");
-
-    const username=(name.toLowerCase().replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,24)||"member");
+    const username=(name.toLowerCase().replace(/[^a-z0-9_]+/g,"_").replace(/^_+|_+$/g,"").slice(0,20)||"member")+"_"+Math.random().toString(36).slice(2,6);
     pendingSignup={name,email,pass,username};
-
-    const {data,error}=await supabase.auth.signUp({
-        email,
-        password:pass,
-        options:{data:{display_name:name,username}}
-    });
+    const {error}=await supabase.auth.signUp({email,password:pass,options:{data:{display_name:name,username}}});
     if(error){pendingSignup=null;return setAuthMessage(error.message);}
-
     document.getElementById("signupStep").classList.remove("active");
     document.getElementById("verifyStep").classList.add("active");
-    clearVerificationBoxes();
-    setupVerificationBoxes();
-    focusVerificationBox();
-    setAuthMessage("A real 6-digit verification code was sent to your email.",true);
+    clearVerificationBoxes();setupVerificationBoxes();focusVerificationBox();
+    setAuthMessage("A verification code has been requested. Check your email.",true);
     startVerificationTimer(10*60);
 }
-
 async function resendCode(){
+    if(!supabase)return setAuthMessage("Connect Supabase before signing up.");
     if(!pendingSignup)return setAuthMessage("Start signup first so we can send a verification code.");
     if(window.verificationResendLocked)return;
-    const {error}=await supabase.auth.signInWithOtp({email:pendingSignup.email,options:{shouldCreateUser:false}});
+    const {error}=await supabase.auth.resend({type:"signup",email:pendingSignup.email});
     if(error)return setAuthMessage(error.message);
-    window.verificationResendLocked=true;
-    clearVerificationBoxes();focusVerificationBox();
-    setAuthMessage("A new verification code was sent to your email.",true);
+    window.verificationResendLocked=true;clearVerificationBoxes();focusVerificationBox();
+    setAuthMessage("A new verification email was sent.",true);
     const btn=document.getElementById("resendCodeBtn");
     if(btn){btn.disabled=true;let seconds=60;btn.innerHTML='<i class="fa-solid fa-clock"></i> Resend in '+seconds+'s';clearInterval(window.resendCountdown);window.resendCountdown=setInterval(()=>{seconds--;if(seconds<=0){clearInterval(window.resendCountdown);window.verificationResendLocked=false;btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-rotate"></i> Resend code';}else btn.innerHTML='<i class="fa-solid fa-clock"></i> Resend in '+seconds+'s';},1000);}
     startVerificationTimer(10*60);
@@ -2857,46 +2900,63 @@ function clearVerificationBoxes(){document.querySelectorAll(".verification-digit
 function focusVerificationBox(){const first=document.querySelector(".verification-digit");if(first)setTimeout(()=>first.focus(),80)}
 
 async function verifySignup(){
+    if(!supabase)return setAuthMessage("Connect Supabase first.");
     const code=getVerificationCode();
     if(code.length!==6){document.querySelectorAll(".verification-digit").forEach(box=>box.classList.add("invalid"));return setAuthMessage("Please enter all 6 digits.");}
     if(!pendingSignup)return setAuthMessage("Your signup session expired. Please start again.");
-    const {data,error}=await supabase.auth.verifyOtp({email:pendingSignup.email,token:code,type:"email"});
+    const {data,error}=await supabase.auth.verifyOtp({email:pendingSignup.email,token:code,type:"signup"});
     if(error){document.querySelectorAll(".verification-digit").forEach(box=>box.classList.add("invalid"));return setAuthMessage(error.message);}
-    const {data:pwData,error:pwError}=await supabase.auth.updateUser({password:pendingSignup.pass,data:{display_name:pendingSignup.name,username:pendingSignup.username}});
-    if(pwError)return setAuthMessage(pwError.message);
-    currentUser=pwData.user||data.user;
-    await ensureProfile(currentUser,pendingSignup);
+    currentUser=data.user;await ensureProfile(currentUser,pendingSignup);
     pendingSignup=null;clearVerificationTimer();clearInterval(window.resendCountdown);
     setAuthMessage("Verification successful! Welcome to VybezApp.",true);
     await showApp(currentUser);
 }
-
 loginForm.addEventListener("submit",async e=>{
     e.preventDefault();
+    if(!supabase)return setAuthMessage("Supabase is not connected. Add your Project URL and Publishable Key in this file.");
     const email=document.getElementById("username").value.trim().toLowerCase(),p=document.getElementById("password").value;
     if(!email||!p)return setAuthMessage("Enter your email and password.");
     if(!email.includes("@"))return setAuthMessage("Login uses your email address.");
     const {data,error}=await supabase.auth.signInWithPassword({email,password:p});
     if(error)return setAuthMessage(error.message);
-    currentUser=data.user;await loadUserData(currentUser);await showApp(currentUser);
+    currentUser=data.user;await showApp(currentUser);
 });
 function createAccount(){switchAuth("signup");document.getElementById("signupName").focus();}
-function showGuestMode(){loginScreen.style.display="none";applyGuestMode();}
-function handleHeaderAuth(){if(currentUser){navTo("settings");showToast("You are already signed in");}else{loginScreen.style.display="flex";switchAuth("login");}}
+function showGuestMode(){currentUser=null;currentProfile=null;currentSettings=null;currentPosts=[];loginScreen.style.display="none";document.body.classList.add("dark");applyGuestMode();}
+function handleHeaderAuth(){if(currentUser){navTo("profile");showToast("Your profile is open");}else{loginScreen.style.display="flex";switchAuth("login");}}
 async function showApp(user){
     currentUser=user||currentUser;if(!currentUser)return;
-    await loadUserData(currentUser);
-    loginScreen.style.display="none";
-    const p=currentProfile||{};const username=p.displayName||currentUser.email?.split("@")[0]||"Member";
-    document.getElementById("sidebarUsername").textContent=username;document.getElementById("profileName").textContent=username;document.getElementById("avatar").textContent=(p.avatar||username.charAt(0)).toUpperCase();document.getElementById("accountChip").style.display="flex";document.getElementById("headerAuthBtn").style.display="none";document.getElementById("memberHeadline").textContent="Welcome back, "+username+" — the stage is yours.";document.getElementById("memberCopy").textContent="Your full 1,000-song catalog, artist discovery and interactive Shorts feed are unlocked.";document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-sparkles"></i> Explore';document.getElementById("memberAction").onclick=()=>navTo("music");document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>1,000</strong><span>Tracks unlocked</span></div><div class="stat-card"><strong>'+artistCatalog.length+'+</strong><span>Artists</span></div><div class="stat-card"><strong>6</strong><span>Interactive Shorts</span></div><div class="stat-card"><strong><i class="fa-solid fa-shield-halved"></i></strong><span>Verified member</span></div>';document.getElementById("sidebarUsername").nextElementSibling.textContent="Verified member";document.body.classList.add("member-mode");refreshMemberVisualState();updateProfileUI();loadSettingsPlus();
+    await loadUserData(currentUser);loginScreen.style.display="none";
+    const p=getProfileData(),username=p.displayName||currentUser.email?.split("@")[0]||"Member";
+    document.getElementById("sidebarUsername").textContent=username;
+    document.getElementById("profileName").textContent=username;
+    document.getElementById("avatar").innerHTML=p.avatar&&p.avatar.startsWith("data:image/")?'<img src="'+p.avatar+'" alt="Profile photo" style="width:32px;height:32px;border-radius:50%;object-fit:cover">':escapeHTML((p.avatar||username.charAt(0)).toUpperCase());
+    document.getElementById("accountChip").style.display="flex";document.getElementById("headerAuthBtn").style.display="none";
+    document.getElementById("memberHeadline").textContent="Welcome back, "+username+" — the stage is yours.";
+    document.getElementById("memberCopy").textContent="Your profile, settings and community activity are connected to your account.";
+    document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-user"></i> View profile';
+    document.getElementById("memberAction").onclick=()=>navTo("profile");
+    document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>1,000</strong><span>Tracks unlocked</span></div><div class="stat-card"><strong>'+artistCatalog.length+'+</strong><span>Artists</span></div><div class="stat-card"><strong>6</strong><span>Shorts previews</span></div><div class="stat-card"><strong><i class="fa-solid fa-shield-halved"></i></strong><span>Member account</span></div>';
+    document.getElementById("sidebarUsername").nextElementSibling.textContent="Signed in member";
+    document.body.classList.add("dark","member-mode");refreshMemberVisualState();updateProfileUI();await loadSettingsPlus();navTo("home");
 }
-function applyGuestMode(){document.getElementById("accountChip").style.display="none";document.getElementById("headerAuthBtn").style.display="inline-flex";document.getElementById("memberHeadline").textContent="You're exploring as a guest";document.getElementById("memberCopy").textContent="Log in or create a free account to unlock the full catalog, saved favorites, comments and personalized discovery.";document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-right-to-bracket"></i> Log in';document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>6</strong><span>Guest previews</span></div><div class="stat-card"><strong>1,000</strong><span>Member tracks</span></div><div class="stat-card"><strong>20+</strong><span>Artists to discover</span></div><div class="stat-card"><strong>Free</strong><span>To join</span></div>';document.getElementById("sidebarUsername").textContent="Guest";document.getElementById("sidebarUsername").nextElementSibling.textContent="Preview mode";document.body.classList.remove("member-mode");updateProfileUI();}
-async function logout(){await supabase.auth.signOut();currentUser=null;currentProfile=null;currentSettings=null;location.reload();}
+function applyGuestMode(){
+    document.getElementById("accountChip").style.display="none";document.getElementById("headerAuthBtn").style.display="inline-flex";
+    document.getElementById("memberHeadline").textContent="You're exploring as a guest";
+    document.getElementById("memberCopy").textContent="Log in or create a free account to save your profile, posts and preferences.";
+    document.getElementById("memberAction").innerHTML='<i class="fa-solid fa-right-to-bracket"></i> Log in';
+    document.getElementById("memberAction").onclick=handleHeaderAuth;
+    document.getElementById("homeStats").innerHTML='<div class="stat-card"><strong>6</strong><span>Guest previews</span></div><div class="stat-card"><strong>1,000</strong><span>Member tracks</span></div><div class="stat-card"><strong>20+</strong><span>Artists to discover</span></div><div class="stat-card"><strong>Free</strong><span>To join</span></div>';
+    document.getElementById("sidebarUsername").textContent="Guest";document.getElementById("sidebarUsername").nextElementSibling.textContent="Preview mode";
+    document.body.classList.remove("member-mode");document.body.classList.add("dark");updateProfileUI();navTo("home");
+}
+async function logout(){if(supabase)await supabase.auth.signOut();currentUser=null;currentProfile=null;currentSettings=null;currentPosts=[];loginScreen.style.display="flex";switchAuth("login");applyGuestMode();}
+function signOut(){logout();}
 
 /* =========================================================
    DATABASE-BACKED SETTINGS
 ========================================================= */
-async function loadDarkMode(){const dark=currentSettings?.dark_mode===true;document.body.classList.toggle("dark",dark);document.getElementById("darkModeToggle")?.classList.toggle("active",dark);}
+async function loadDarkMode(){const dark=currentSettings?.dark_mode!==false;document.body.classList.toggle("dark",dark);document.getElementById("darkModeToggle")?.classList.toggle("active",dark);}
 async function toggleDarkMode(){const dark=!document.body.classList.contains("dark");document.body.classList.toggle("dark",dark);document.getElementById("darkModeToggle")?.classList.toggle("active",dark);await saveUserSettings({dark_mode:dark});}
 async function toggleSetting(element,settingName){element.classList.toggle("active");const enabled=element.classList.contains("active");await saveUserSettings({[settingName]:enabled});}
 
@@ -3535,123 +3595,63 @@ if (document.readyState === "loading") {
 
 
 /* ===== Profile / identity system ===== */
-const defaultProfile = {
-    displayName: "Vybez Guest",
-    username: "guest",
-    status: "Exploring Vybez ✨",
-    bio: "Welcome to my Vybez profile. Add a bio to tell people who you are.",
-    location: "",
-    website: "",
-    avatar: "V",
-    accent: "blue",
-    posts: 0,
-    followers: 0,
-    following: 0,
-    likes: 0,
-    showActivity: true,
-    showFollowers: true,
-    privateProfile: false,
-    joinedAt: null
-};
-
-const profileStatuses = [
-    "Exploring Vybez ✨",
-    "🎧 Listening to Vybez",
-    "🎬 Watching a movie",
-    "🎵 Finding new music",
-    "🔥 Feeling the vibes",
-    "📱 Scrolling Shorts",
-    "💫 Living my best life"
-];
-
+const defaultProfile={displayName:"Vybez Guest",username:"guest",status:"Exploring Vybez ✨",bio:"Welcome to my Vybez profile. Add a bio to tell people who you are.",location:"",website:"",avatar:"V",accent:"blue",posts:0,followers:0,following:0,likes:0,showActivity:true,showFollowers:true,privateProfile:false,joinedAt:null};
+const profileStatuses=["Exploring Vybez ✨","🎧 Listening to Vybez","🎬 Watching a movie","🎵 Finding new music","🔥 Feeling the vibes","📱 Scrolling Shorts","💫 Living my best life"];
 function getProfileData(){return {...defaultProfile,...(currentProfile||{})};}
+function mapProfile(d){return {...defaultProfile,...d,displayName:d.display_name||defaultProfile.displayName,username:d.username||defaultProfile.username,status:d.status||defaultProfile.status,bio:d.bio||defaultProfile.bio,location:d.location||"",website:d.website||"",avatar:d.avatar||"V",accent:d.accent||"blue",posts:Number(d.posts||0),followers:Number(d.followers||0),following:Number(d.following||0),likes:Number(d.likes||0),showActivity:d.show_activity!==false,showFollowers:d.show_followers!==false,privateProfile:!!d.private_account,joinedAt:d.created_at||null};}
 async function loadUserData(user){
-    if(!user){currentProfile=null;currentSettings=null;return;}
-    const [{data:profile},{data:settings}]=await Promise.all([
-        supabase.from("profiles").select("*").eq("id",user.id).maybeSingle(),
-        supabase.from("user_settings").select("*").eq("user_id",user.id).maybeSingle()
+    if(!user){currentProfile=null;currentSettings=null;currentPosts=[];return;}
+    if(!supabase)throw new Error("Supabase is not configured.");
+    const [pr,sr,po]=await Promise.all([
+      supabase.from("profiles").select("*").eq("id",user.id).maybeSingle(),
+      supabase.from("user_settings").select("*").eq("user_id",user.id).maybeSingle(),
+      supabase.from("posts").select("id,caption,media_url,media_type,created_at").eq("user_id",user.id).order("created_at",{ascending:false}).limit(60)
     ]);
-    currentProfile=profile?{...profile,displayName:profile.display_name,username:profile.username,status:profile.status,bio:profile.bio,location:profile.location,website:profile.website,avatar:profile.avatar,accent:profile.accent,posts:profile.posts,followers:profile.followers,following:profile.following,likes:profile.likes,showActivity:profile.show_activity,showFollowers:profile.show_followers,privateProfile:profile.private_account,joinedAt:profile.joined_at}:{...defaultProfile,id:user.id,displayName:user.user_metadata?.display_name||user.email?.split("@")[0]||"Vybez Member",username:user.user_metadata?.username||"member",joinedAt:user.created_at};
-    currentSettings=settings||null;
-    await loadDarkMode();
+    if(pr.error)throw pr.error;if(sr.error)throw sr.error;if(po.error&&po.error.code!=="42P01")throw po.error;
+    if(!pr.data){await ensureProfile(user);const {data,error}=await supabase.from("profiles").select("*").eq("id",user.id).single();if(error)throw error;currentProfile=mapProfile(data);}
+    else currentProfile=mapProfile(pr.data);
+    currentSettings=sr.data||{dark_mode:true};currentPosts=po.data||[];await loadDarkMode();
 }
 async function ensureProfile(user,signup){
-    if(!user)return;
-    const payload={id:user.id,username:signup?.username||user.user_metadata?.username||("member_"+user.id.slice(0,6)),display_name:signup?.name||user.user_metadata?.display_name||user.email?.split("@")[0]||"Vybez Member",status:"Exploring Vybez ✨",bio:defaultProfile.bio,location:"",website:"",avatar:(signup?.name||"V").charAt(0).toUpperCase(),accent:"blue",joined_at:user.created_at};
-    const {data,error}=await supabase.from("profiles").upsert(payload,{onConflict:"id"}).select().single();
-    if(error)console.error("Profile create error:",error);else currentProfile=data;
-    const {data:settings}=await supabase.from("user_settings").upsert({user_id:user.id,dark_mode:false,show_activity:true,show_followers:true,private_account:false,likes:true,comments:true,followers:true,messages:true,activity:true,follower_count:true,discovery:true,autoplay:true,data_saver:false},{onConflict:"user_id"}).select().single();
-    currentSettings=settings||currentSettings;
+    if(!user||!supabase)return;
+    const payload={id:user.id,username:signup?.username||user.user_metadata?.username||("member_"+user.id.slice(0,8)),display_name:signup?.name||user.user_metadata?.display_name||user.email?.split("@")[0]||"Vybez Member",status:"Exploring Vybez ✨",bio:defaultProfile.bio,avatar:(signup?.name||"V").charAt(0).toUpperCase(),accent:"blue",show_activity:true,show_followers:true,private_account:false};
+    const {data,error}=await supabase.from("profiles").upsert(payload,{onConflict:"id"}).select().single();if(error)throw error;currentProfile=mapProfile(data);
+    const {data:settings,error:se}=await supabase.from("user_settings").upsert({user_id:user.id,dark_mode:true},{onConflict:"user_id",ignoreDuplicates:true}).select().maybeSingle();if(se)throw se;if(settings)currentSettings=settings;
 }
 async function saveProfileData(profile){
-    if(!currentUser)return;
-    currentProfile={...getProfileData(),...profile};
-    const payload={id:currentUser.id,username:currentProfile.username,display_name:currentProfile.displayName,status:currentProfile.status,bio:currentProfile.bio,location:currentProfile.location,website:currentProfile.website,avatar:currentProfile.avatar,accent:currentProfile.accent,show_activity:currentProfile.showActivity,show_followers:currentProfile.showFollowers,private_account:currentProfile.privateProfile};
+    if(!currentUser||!supabase){showToast("Sign in to save profile changes.");return;}
+    const p={...getProfileData(),...profile};
+    const payload={id:currentUser.id,username:p.username,display_name:p.displayName,status:p.status,bio:p.bio,location:p.location,website:p.website,avatar:p.avatar,accent:p.accent,show_activity:p.showActivity,show_followers:p.showFollowers,private_account:p.privateProfile};
     const {data,error}=await supabase.from("profiles").upsert(payload,{onConflict:"id"}).select().single();
-    if(error){console.error(error);showToast(error.message);return;}currentProfile={...data,displayName:data.display_name,username:data.username,status:data.status,bio:data.bio,location:data.location,website:data.website,avatar:data.avatar,accent:data.accent,posts:data.posts,followers:data.followers,following:data.following,likes:data.likes,showActivity:data.show_activity,showFollowers:data.show_followers,privateProfile:data.private_account,joinedAt:data.joined_at};updateProfileUI();
+    if(error){console.error(error);showToast(error.message);return;}currentProfile=mapProfile(data);updateProfileUI();
 }
 async function saveUserSettings(changes={}){
-    if(!currentUser)return;
-    const payload={user_id:currentUser.id,...changes};
-    const {data,error}=await supabase.from("user_settings").upsert(payload,{onConflict:"user_id"}).select().single();
-    if(error){console.error(error);showToast(error.message);return;}currentSettings={...currentSettings,...data};await loadDarkMode();
+    if(!currentUser||!supabase){showToast("Sign in to save your settings.");return false;}
+    const {data,error}=await supabase.from("user_settings").upsert({user_id:currentUser.id,...changes,updated_at:new Date().toISOString()},{onConflict:"user_id"}).select().single();
+    if(error){console.error(error);showToast("Settings not saved: "+error.message);return false;}
+    currentSettings={...(currentSettings||{}),...data};await loadDarkMode();return true;
 }
-
-function updateProfileUI() {
-    const p = getProfileData();
-    const name = p.displayName || "Vybez Guest";
-    const username = p.username || "guest";
-
-    const set = (id, value) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = value;
-    };
-
-    set("profileDisplayName", name);
-    set("profileUsername", "@" + username.replace(/^@/, ""));
-    set("profileStatusText", p.status || "Exploring Vybez ✨");
-    set("bigStatus", p.status || "🎧 Listening to Vybez");
-    set("profileBio", p.bio || defaultProfile.bio);
-    set("profilePosts", Number(p.posts || 0).toLocaleString());
-    set("profileFollowers", p.showFollowers === false ? "—" : Number(p.followers || 0).toLocaleString());
-    set("profileFollowing", Number(p.following || 0).toLocaleString());
-    set("profileLikes", Number(p.likes || 0).toLocaleString());
-
-    const loc = document.getElementById("profileLocation");
-    if (loc) loc.innerHTML = '<i class="fa-solid fa-location-dot"></i> ' + escapeHTML(p.location || "Add location");
-
-    const web = document.getElementById("profileWebsite");
-    if (web) web.innerHTML = '<i class="fa-solid fa-link"></i> ' + escapeHTML(p.website || "Add website");
-
-    const joined = document.getElementById("profileJoined");
-    if (joined) {
-        const date = p.joinedAt ? new Date(p.joinedAt) : null;
-        joined.innerHTML = '<i class="fa-solid fa-calendar"></i> ' +
-            (date && !isNaN(date) ? "Joined " + date.toLocaleDateString(undefined, {month:"short", year:"numeric"}) : "Joined recently");
-    }
-
-    ["profileAvatar", "editorAvatar"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.textContent = p.avatar || name.charAt(0).toUpperCase();
-            el.style.background = accentGradient(p.accent);
-        }
-    });
-
-    const cover = document.getElementById("profileCover");
-    if (cover) cover.style.background = coverGradient(p.accent);
-
-    const statusDot = document.querySelector(".status-dot");
-    if (statusDot) statusDot.style.background = accentColor(p.accent);
-
-    const activity = document.getElementById("showActivityToggle");
-    const followers = document.getElementById("showFollowersToggle");
-    const priv = document.getElementById("privateProfileToggle");
-    if (activity) activity.checked = p.showActivity !== false;
-    if (followers) followers.checked = p.showFollowers !== false;
-    if (priv) priv.checked = !!p.privateProfile;
+function updateProfileUI(){
+    const p=getProfileData(),name=p.displayName||"Vybez Guest",username=p.username||"guest";
+    const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+    set("profileDisplayName",name);set("profileUsername","@"+username.replace(/^@/,""));set("profileStatusText",p.status||"Exploring Vybez ✨");set("bigStatus",p.status||"🎧 Listening to Vybez");set("profileBio",p.bio||defaultProfile.bio);
+    set("profilePosts",Number(currentPosts.length||p.posts||0).toLocaleString());set("profileFollowers",p.showFollowers===false?"—":Number(p.followers||0).toLocaleString());set("profileFollowing",Number(p.following||0).toLocaleString());set("profileLikes",Number(p.likes||0).toLocaleString());
+    const loc=document.getElementById("profileLocation");if(loc)loc.innerHTML='<i class="fa-solid fa-location-dot"></i> '+escapeHTML(p.location||"Add location");
+    const web=document.getElementById("profileWebsite");if(web)web.innerHTML='<i class="fa-solid fa-link"></i> '+escapeHTML(p.website||"Add website");
+    const joined=document.getElementById("profileJoined");if(joined){const d=p.joinedAt?new Date(p.joinedAt):null;joined.innerHTML='<i class="fa-solid fa-calendar"></i> '+(d&&!isNaN(d)?"Joined "+d.toLocaleDateString(undefined,{month:"short",year:"numeric"}):"Joined recently");}
+    ["profileAvatar","editorAvatar"].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.style.background=accentGradient(p.accent);if(p.avatar&&p.avatar.startsWith("data:image/"))el.innerHTML='<img src="'+p.avatar+'" alt="Profile photo">';else el.textContent=p.avatar||name.charAt(0).toUpperCase();});
+    const cover=document.getElementById("profileCover");if(cover)cover.style.background=coverGradient(p.accent);
+    const activity=document.getElementById("showActivityToggle"),followers=document.getElementById("showFollowersToggle"),priv=document.getElementById("privateProfileToggle");
+    if(activity)activity.checked=p.showActivity!==false;if(followers)followers.checked=p.showFollowers!==false;if(priv)priv.checked=!!p.privateProfile;
+    const grid=document.getElementById("profilePostsGrid");if(grid){if(!currentPosts.length)grid.innerHTML='<div class="profile-post-empty"><i class="fa-regular fa-images"></i><strong>No posts yet</strong><span>Posts you add to VybezApp will appear here.</span></div>';else grid.innerHTML=currentPosts.map(post=>`<div class="profile-post-tile">${post.media_type==="video"?`<video src="${escapeHTML(post.media_url)}" controls preload="metadata"></video>`:`<img src="${escapeHTML(post.media_url)}" alt="${escapeHTML(post.caption||"Profile post")}">`}</div>`).join("");}
 }
-
+async function uploadProfilePhoto(input){
+    const file=input.files?.[0];if(!file)return;
+    if(!file.type.startsWith("image/")){showToast("Choose an image file.");return;}
+    if(file.size>700*1024){showToast("Choose a photo smaller than 700 KB.");input.value="";return;}
+    if(!currentUser){showToast("Sign in before saving a profile photo.");input.value="";return;}
+    const reader=new FileReader();reader.onload=async()=>{const p=getProfileData();p.avatar=String(reader.result);await saveProfileData(p);showToast("Profile photo updated.");};reader.onerror=()=>showToast("Could not read that photo.");reader.readAsDataURL(file);input.value="";
+}
 function accentColor(accent) {
     return ({blue:"#3b82f6",purple:"#8b5cf6",pink:"#ec4899",green:"#22c55e",orange:"#f97316"})[accent] || "#3b82f6";
 }
@@ -3700,7 +3700,7 @@ async function saveProfilePreferences(){
 }
 async function setProfileAccent(accent){const p=getProfileData();p.accent=accent;await saveProfileData(p);updateProfileUI();}
 async function changeCoverStyle(){const order=["blue","purple","pink","green","orange"],p=getProfileData();p.accent=order[(order.indexOf(p.accent)+1)%order.length];await saveProfileData(p);updateProfileUI();showToast("Profile style changed");}
-async function changeAvatar(){const p=getProfileData(),avatar=prompt("Enter one emoji or a single letter for your profile photo:",p.avatar||"V");if(avatar===null)return;const clean=Array.from(avatar.trim()).slice(0,2).join("");if(!clean)return;p.avatar=clean;await saveProfileData(p);updateProfileUI();}
+function changeAvatar(){document.getElementById("profilePhotoInput")?.click();}
 async function cycleStatus(){const p=getProfileData(),current=profileStatuses.indexOf(p.status);p.status=profileStatuses[(current+1)%profileStatuses.length];await saveProfileData(p);updateProfileUI();showToast("Status changed");}
 
 function shareProfile() {
@@ -3805,26 +3805,27 @@ function syncAccountChip(){
 
 <script>
 (function(){
-  const defaults={likes:true,comments:true,followers:true,messages:true,activity:true,followerCount:true,discovery:true,autoplay:true,dataSaver:false,dark:false};
+  const defaults={likes:true,comments:true,followers:true,messages:true,activity:true,follower_count:true,discovery:true,autoplay:true,data_saver:false,dark_mode:true};
   window.loadSettingsPlus=async function(){
-    if(!currentUser)return;
     const s={...defaults,...(currentSettings||{})};
-    const map={setLikes:'likes',setComments:'comments',setFollowers:'followers',setMessages:'messages',setActivity:'activity',setFollowerCount:'follower_count',setDiscovery:'discovery',setAutoplay:'autoplay',setDataSaver:'data_saver',setDark:'dark_mode'};
-    Object.entries(map).forEach(([id,k])=>{const el=document.getElementById(id);if(el)el.checked=!!s[k]});
-    const n=document.getElementById('settingsUserName');if(n)n.textContent=currentProfile?.displayName||currentUser.email||'Your Vybez account';
-    const accent=document.getElementById('setAccent');if(accent&&currentProfile?.accent)accent.value=currentProfile.accent;
+    const map={setLikes:"likes",setComments:"comments",setFollowers:"followers",setMessages:"messages",setActivity:"activity",setFollowerCount:"follower_count",setDiscovery:"discovery",setAutoplay:"autoplay",setDataSaver:"data_saver",setDark:"dark_mode"};
+    Object.entries(map).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.checked=!!s[key];});
+    const priv=document.getElementById("setPrivate");if(priv)priv.checked=!!currentProfile?.privateProfile;
+    const n=document.getElementById("settingsUserName");if(n)n.textContent=currentProfile?.displayName||currentUser?.email||"Guest account";
+    const accent=document.getElementById("setAccent");if(accent)accent.value=currentProfile?.accent||"blue";
+    document.body.classList.toggle("dark",s.dark_mode!==false);
   };
   window.saveSettingsPlus=async function(){
-    if(!currentUser)return;
-    const ids=['setLikes','setComments','setFollowers','setMessages','setActivity','setFollowerCount','setDiscovery','setAutoplay','setDataSaver','setDark'];
-    const keys=['likes','comments','followers','messages','activity','follower_count','discovery','autoplay','data_saver','dark_mode'];
-    const s={};ids.forEach((id,i)=>{const e=document.getElementById(id);if(e)s[keys[i]]=!!e.checked});
-    await saveUserSettings(s);
-    const p=getProfileData();p.showActivity=s.activity;p.showFollowers=s.follower_count;p.privateProfile=!s.discovery;await saveProfileData(p);
-    showToast('Settings saved');
+    if(!currentUser)return showToast("Sign in to save account settings.");
+    const ids=["setLikes","setComments","setFollowers","setMessages","setActivity","setFollowerCount","setDiscovery","setAutoplay","setDataSaver","setDark"];
+    const keys=["likes","comments","followers","messages","activity","follower_count","discovery","autoplay","data_saver","dark_mode"];
+    const changes={};ids.forEach((id,i)=>{const el=document.getElementById(id);if(el)changes[keys[i]]=!!el.checked;});
+    const ok=await saveUserSettings(changes);
+    const p=getProfileData();p.showActivity=changes.activity;p.showFollowers=changes.follower_count;p.privateProfile=!!document.getElementById("setPrivate")?.checked||!changes.discovery;await saveProfileData(p);
+    if(ok)showToast("Settings saved to your account.");
   };
-  window.toggleSettingsDark=async function(on){document.body.classList.toggle('light-mode',!on);await saveUserSettings({dark_mode:on});};
-  window.resetSettingsPlus=async function(){if(!confirm('Reset Vybez settings to their defaults?'))return;const s={likes:true,comments:true,followers:true,messages:true,activity:true,follower_count:true,discovery:true,autoplay:true,data_saver:false,dark_mode:false};await saveUserSettings(s);await loadSettingsPlus();showToast('Settings reset');};
+  window.toggleSettingsDark=async function(on){document.body.classList.toggle("dark",!!on);const ok=await saveUserSettings({dark_mode:!!on});if(!ok)document.body.classList.add("dark");};
+  window.resetSettingsPlus=async function(){if(!currentUser)return showToast("Sign in to reset account settings.");if(!confirm("Reset Vybez settings to their defaults?"))return;await saveUserSettings({...defaults});await loadSettingsPlus();showToast("Settings reset.");};
 })();
 </script>
 
@@ -3834,21 +3835,21 @@ function syncAccountChip(){
    SUPABASE APP INITIALIZATION
 ========================================================= */
 async function initSupabaseApp(){
-  if(!SUPABASE_URL || SUPABASE_URL.includes('YOUR_SUPABASE') || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_PUBLISHABLE_KEY.includes('YOUR_SUPABASE')){
-    console.warn('VybezApp: add your Supabase URL and publishable key in SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY.');
-    loginScreen.style.display='none';applyGuestMode();return;
-  }
+  document.body.classList.add("dark");loginScreen.style.display="flex";
+  if(!SUPABASE_CONFIGURED){setAuthMessage("Connect Supabase: replace the Project URL and Publishable Key in this file.");return;}
   try{
-    const {data:{session}}=await supabase.auth.getSession();
-    if(session?.user){currentUser=session.user;await loadUserData(currentUser);await showApp(currentUser);syncAccountChip();}
-    else{loginScreen.style.display='none';applyGuestMode();}
-    supabase.auth.onAuthStateChange(async(_event,session)=>{
-      if(session?.user){currentUser=session.user;await loadUserData(currentUser);await showApp(currentUser);syncAccountChip();}
-      else{currentUser=null;currentProfile=null;currentSettings=null;applyGuestMode();}
+    const {data:{session},error}=await supabase.auth.getSession();if(error)throw error;
+    if(session?.user){currentUser=session.user;await showApp(currentUser);}
+    else{loginScreen.style.display="flex";switchAuth("login");}
+    supabase.auth.onAuthStateChange((_event,session)=>{
+      if(session?.user){currentUser=session.user;Promise.resolve().then(()=>showApp(currentUser)).catch(err=>{console.error(err);loginScreen.style.display="flex";setAuthMessage(err.message||"Could not load your account.");});}
+      else if(_event==="SIGNED_OUT"){currentUser=null;currentProfile=null;currentSettings=null;currentPosts=[];loginScreen.style.display="flex";switchAuth("login");}
     });
-  }catch(error){console.error(error);setAuthMessage(error.message||'Could not connect to Supabase.');loginScreen.style.display='flex';}
+  }catch(error){console.error(error);loginScreen.style.display="flex";setAuthMessage(error.message||"Could not connect to Supabase.");}
 }
 initSupabaseApp();
 </script>
 </body>
 </html>
+
+
